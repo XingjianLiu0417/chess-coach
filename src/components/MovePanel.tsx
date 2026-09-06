@@ -7,10 +7,12 @@ function PlayerStrip({ color, isHuman }: { color: Color; isHuman: boolean }) {
   const history = useStore((s) => s.history);
   const playerColor = useStore((s) => s.playerColor);
   const thinking = useStore((s) => s.thinking);
+  const turn = useStore((s) => s.turn);
+  const playing = useStore((s) => s.status) === 'playing';
   const moves = history.filter((r) => r.color === color);
   const accs = moves.map((m) => m.acc).filter((a): a is number => a != null);
   const acc = accs.length ? Math.round(accs.reduce((a, b) => a + b, 0) / accs.length) : null;
-  const isTurn = useStore((s) => s.turn) === color && useStore((s) => s.status) === 'playing';
+  const isTurn = turn === color && playing;
   const engineThinking = thinking && color !== playerColor;
 
   return (
