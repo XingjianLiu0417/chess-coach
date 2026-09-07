@@ -154,8 +154,9 @@ export class UciEngine {
     if (this.ready) return;
     this.send('uci');
     await this.waitReady(timeoutMs);
-    this.send('setoption name Threads value 1');
-    this.send('setoption name Hash value 16');
+    // 注意:不要在这里发任何 setoption!
+    // 实测该引擎构建对 'setoption name Threads' 会直接挂死(后续命令全部无响应)。
+    // Threads=1 / Hash=16 本来就是默认值,保持默认即可;难度由调用方单独 setOption('Skill Level')。
   }
 
   async setOption(name: string, value: string | number) {
