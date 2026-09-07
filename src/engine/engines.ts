@@ -1,8 +1,12 @@
 // 引擎 worker 管理:分析引擎与对战引擎两个独立 worker + 诊断/自愈
 import { UciEngine, type UciWorker } from './uci';
 
-/** 引擎文件由 scripts/copy-engine.mjs 拷到 public/engine/ */
-export const ENGINE_SCRIPT = '/engine/stockfish.wasm.js';
+/**
+ * 引擎 worker 脚本路径(base 感知):
+ * 部署到 GitHub Pages 等项目子路径时(base:'./'),BASE_URL 会变成 './',
+ * 不能写死 '/engine/...',否则子路径部署下 404。
+ */
+export const ENGINE_SCRIPT = `${import.meta.env.BASE_URL}engine/stockfish.wasm.js`;
 
 // ---------- 诊断环形缓冲 ----------
 const diag: string[] = [];

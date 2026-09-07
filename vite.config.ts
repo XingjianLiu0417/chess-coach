@@ -9,6 +9,9 @@ const isolationHeaders = {
 }
 
 export default defineConfig({
+  // base './':产物用相对路径,可部署到任意子路径(GitHub Pages 项目页)
+  // 开发时仍以 / 访问,BASE_URL='/' 不受影响。
+  base: './',
   plugins: [react()],
   server: { headers: isolationHeaders, host: true },
   preview: { headers: isolationHeaders },
