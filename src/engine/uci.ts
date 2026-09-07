@@ -82,15 +82,18 @@ export class UciEngine {
   private w: UciWorker;
   private onInteresting: ((line: string) => void) | null;
 
-  constructor(w: UciWorker, opts?: { onInteresting?: (line: string) => void }) {
+  constructor(w: UciWorker, opts?: { onInteresting?: (line: string) => void; onSend?: (cmd: string) => void }) {
     this.w = w;
     this.onInteresting = opts?.onInteresting ?? null;
+    this.onSend = opts?.onSend ?? null;
     w.onmessage = (e) => this.onData(String(e.data));
   }
 
   isReady(): boolean {
     return this.ready;
   }
+
+  private onSend: ((cmd: string) => void) | null;
 
   private onData(data: string) {
     for (const raw of data.split('\n')) {
@@ -126,6 +129,7 @@ export class UciEngine {
   }
 
   private send(cmd: string) {
+    this.onSend?.(cmd);
     this.w.postMessage(cmd);
   }
 

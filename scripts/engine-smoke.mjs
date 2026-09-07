@@ -66,6 +66,15 @@ if (!results[0].some((l) => l.startsWith('uciok'))) {
 }
 console.log('uciok 握手成功');
 
+// isready 测试:空闲引擎应立即回 readyok
+results.push([]);
+send('isready');
+await until((l) => l.startsWith('readyok'), 3000).catch(() => {
+  console.error('!! isready 未在 3s 内得到 readyok');
+  process.exit(1);
+});
+console.log('isready 应答正常');
+
 const cases = [
   {
     name: 'Nf3 之后(黑方走子)',
@@ -101,13 +110,13 @@ const all = results.flat();
 const idName = all.find((l) => l.startsWith('id name')) ?? '?';
 console.log(`引擎标识:${idName}`);
 for (let i = 0; i < cases.length; i++) {
-  const lines = results[i + 1]; // results[0] 是握手组
+  const lines = results[2 + i]; // [0]=握手 [1]=isready 之后才是用例
   const bm = lines.find((l) => l.startsWith('bestmove'));
   const lastInfo = [...lines].reverse().find((l) => l.startsWith('info') && /score (cp|mate)/.test(l));
   const score = lastInfo ? lastInfo.match(/score (cp -?\d+|mate -?\d+)/)?.[1] : '(无)';
   const depth = lastInfo ? lastInfo.match(/depth (\d+)/)?.[1] : '-';
   console.log(`[${cases[i].name}] bestmove=${bm ?? '(无)'} depth=${depth} score=${score}`);
 }
-const ok = all.some((l) => /^id name Stockfish/.test(l)) && cases.every((_, i) => results[i + 1].some((l) => l.startsWith('bestmove')));
+const ok = all.some((l) => /^id name Stockfish/.test(l)) && cases.every((_, i) => results[2 + i].some((l) => l.startsWith('bestmove')));
 console.log(ok ? 'SMOKE_PASS' : 'SMOKE_FAIL');
 process.exit(ok ? 0 : 1);

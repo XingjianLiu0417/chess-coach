@@ -24,16 +24,20 @@ function makeEngine(scope: 'analyst' | 'player'): UciEngine {
   worker.addEventListener('messageerror', () => pushDiag(scope, 'messageerror'));
   const engine = new UciEngine(worker as unknown as UciWorker, {
     onInteresting: (line) => {
+      // 全量关键事件:握手、就绪、回报、错误
       if (
         line.startsWith('id name') ||
         line.startsWith('id author') ||
         line === 'uciok' ||
+        line === 'readyok' ||
         line.startsWith('bestmove') ||
+        line.startsWith('info depth 1 ') ||
         /error|abort|fail|unknown/i.test(line)
       ) {
-        pushDiag(scope, line);
+        pushDiag(scope, `<< ${line.slice(0, 120)}`);
       }
     },
+    onSend: (cmd) => pushDiag(scope, `>> ${cmd}`),
   });
   return engine;
 }
