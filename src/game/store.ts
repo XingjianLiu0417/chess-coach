@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { Chess } from 'chess.js';
 import type { Color, EngineAnalysis, EngineSettings, MoveRecord, Verdict, CoachMsg, CoachSettings } from '../types';
 import { accuracyOf, classify, cpLossFor } from './analysis';
-import { detectPhase, sideToMove } from './helpers';
+import { detectPhase, sideToMove, uciLineToSan } from './helpers';
 import { ensureEngine, getEngines, restartEngine, skillToEngineConfig, clearEngineDiag, pushDiag } from '../engine/engines';
 import { toWhitePersp } from '../engine/uci';
 import { chatStream, loadSettings, saveSettings } from '../coach/llmClient';
@@ -218,16 +218,6 @@ export const useStore = create<StoreState>((set, get) => {
     fireCommentary(ply);
   };
 
-  const sanOfUci = (uci: string, fen: string): string => {
-    const m = uciToMove(uci);
-    if (!m) return uci;
-    try {
-      return new Chess(fen).move(m).san;
-    } catch {
-      return uci;
-    }
-  };
-
   const evalTextOf = (an: EngineAnalysis | null): string => {
     if (!an) return '未知';
     if (an.mateWhite != null) return an.mateWhite > 0 ? `白方M${an.mateWhite}` : `黑方M${-an.mateWhite}`;
@@ -298,6 +288,19 @@ export const useStore = create<StoreState>((set, get) => {
     const st = get();
     const rec = st.history[ply - 1];
     if (!rec) return;
+    // 关键:要告诉用户"本该走什么",必须看【走棋之前】局面的分析——
+    // 那才是轮到用户走的局面,其引擎最佳着法才是用户"更优的选择"。
+    // rec.post 是走完后的分析(轮到对手),绝不能拿来当推荐。
+    const prevRec = st.history[ply - 2] ?? null;
+    const prevFen = prevRec?.fenAfter ?? null;
+    const prevPv = prevRec?.post?.pv ?? [];
+    let bestSan: string | null = null;
+    let contSan: string[] = [];
+    if (prevFen && prevPv.length) {
+      const line = uciLineToSan(prevFen, prevPv);
+      bestSan = line[0] ?? null;
+      contSan = line.slice(1);
+    }
     const msgs = buildCommentaryPrompt({
       fen: rec.fenAfter,
       lastMovesSan: st.history.slice(-6).map((r) => r.san),
@@ -306,8 +309,9 @@ export const useStore = create<StoreState>((set, get) => {
       verdict: rec.verdict,
       cpLossPawns: rec.cpLoss,
       evalText: evalTextOf(rec.post),
-      bestMoveSan: rec.post?.bestMove ? sanOfUci(rec.post.bestMove, rec.fenAfter) : null,
-      pvSan: (rec.post?.pv ?? []).slice(1).map((u) => sanOfUci(u, rec.fenAfter)),
+      bestMoveSan: bestSan,
+      pvSan: contSan,
+      userChoseEngineBest: rec.verdict === 'best',
       phase: phaseOfFen(rec.fenAfter),
       moveNumber: rec.ply,
       isGameOver: false,
@@ -572,14 +576,16 @@ export const useStore = create<StoreState>((set, get) => {
       const st = get();
       if (!question.trim()) return;
       if (st.coachBusy) cancelCoach(); // 正在自动讲解 → 打断,优先回答提问
+      // 当前局面轮到用户走,st.analysis 即当前局面分析:其 pv[0] 就是给用户的建议着法
+      const line = st.analysis?.pv?.length ? uciLineToSan(game.fen(), st.analysis.pv) : [];
       const msgs = buildChatPrompt({
         fen: game.fen(),
         lastMovesSan: st.history.slice(-6).map((r) => r.san),
         humanMoveSan: st.history.length ? st.history[st.history.length - 1].san : '(开局)',
         humanColor: st.playerColor,
         evalText: evalTextOf(st.analysis),
-        bestMoveSan: st.analysis?.bestMove ? sanOfUci(st.analysis.bestMove, game.fen()) : null,
-        pvSan: (st.analysis?.pv ?? []).slice(1).map((u) => sanOfUci(u, game.fen())),
+        bestMoveSan: line[0] ?? null,
+        pvSan: line.slice(1),
         phase: detectPhase(game),
         moveNumber: game.moveNumber(),
         question: question.trim(),
