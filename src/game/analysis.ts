@@ -4,10 +4,13 @@ import type { Phase, Verdict } from '../types';
 export const BEST_EPSILON = 0.15; // 与引擎最佳相差 ≤0.15 兵 → 最佳
 
 export const PHASE_THRESHOLDS: Record<Phase, { inaccuracy: number; mistake: number; blunder: number }> = {
-  // 阈值单位:兵
-  opening: { inaccuracy: 0.5, mistake: 1.0, blunder: 1.8 },
-  middlegame: { inaccuracy: 0.8, mistake: 1.5, blunder: 2.5 },
-  endgame: { inaccuracy: 0.5, mistake: 1.0, blunder: 1.8 },
+  // 阈值单位:兵。v2 校准说明:
+  // 开局均势局面合理着法互相差 0.3-0.8 兵是常态(老引擎无 NNUE,安静局面估值噪声大),
+  // 阈值若压到 0.5 会造成"咋走都 ?!"的误报 → 开局放宽到 1.0 才算不准确。
+  // 残局估值最准、容错最小,阈值最紧;中局居中。
+  opening: { inaccuracy: 1.0, mistake: 2.0, blunder: 3.0 },
+  middlegame: { inaccuracy: 0.8, mistake: 1.6, blunder: 2.8 },
+  endgame: { inaccuracy: 0.5, mistake: 1.0, blunder: 2.0 },
 };
 
 /**

@@ -12,18 +12,26 @@ describe('classify 走子分类', () => {
     expect(classify(0.8, 'middlegame')).toBe('inaccuracy');
     expect(classify(1.49, 'middlegame')).toBe('inaccuracy');
   });
-  it('中局:1.5~2.5 失误,>2.5 大漏招', () => {
-    expect(classify(1.5, 'middlegame')).toBe('mistake');
-    expect(classify(2.5, 'middlegame')).toBe('mistake');
-    expect(classify(2.51, 'middlegame')).toBe('blunder');
+  it('中局:1.6~2.8 失误,>2.8 大漏招', () => {
+    expect(classify(1.5, 'middlegame')).toBe('inaccuracy');
+    expect(classify(1.6, 'middlegame')).toBe('mistake');
+    expect(classify(2.8, 'middlegame')).toBe('mistake');
+    expect(classify(2.81, 'middlegame')).toBe('blunder');
     expect(classify(9, 'middlegame')).toBe('blunder');
   });
-  it('开局阈值更严:损失 0.6 兵在开局已算不准确', () => {
-    expect(classify(0.6, 'opening')).toBe('inaccuracy');
+  it('开局阈值校准:0.6 兵损失(合理着法的常见浮动)→ 好棋;真亏 1 兵才 ?!', () => {
+    expect(classify(0.6, 'opening')).toBe('good');
+    expect(classify(0.99, 'opening')).toBe('good');
+    expect(classify(1.0, 'opening')).toBe('inaccuracy');
+    expect(classify(1.5, 'opening')).toBe('inaccuracy');
+    expect(classify(2.0, 'opening')).toBe('mistake');
+    expect(classify(2.9, 'opening')).toBe('mistake');
+    expect(classify(3.01, 'opening')).toBe('blunder');
   });
-  it('残局阈值严格:0.6 兵即失误?——按表 0.5/1.0/1.8', () => {
+  it('残局阈值严格:0.6 兵已算不准确', () => {
     expect(classify(0.6, 'endgame')).toBe('inaccuracy');
     expect(classify(1.6, 'endgame')).toBe('mistake');
+    expect(classify(2.01, 'endgame')).toBe('blunder');
   });
 });
 
