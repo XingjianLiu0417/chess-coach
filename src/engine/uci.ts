@@ -80,16 +80,23 @@ export class UciEngine {
   private bestResolve: ((r: SearchResult) => void) | null = null;
   private lineHandler: ((line: string) => void) | null = null;
   private w: UciWorker;
+  private onInteresting: ((line: string) => void) | null;
 
-  constructor(w: UciWorker) {
+  constructor(w: UciWorker, opts?: { onInteresting?: (line: string) => void }) {
     this.w = w;
+    this.onInteresting = opts?.onInteresting ?? null;
     w.onmessage = (e) => this.onData(String(e.data));
+  }
+
+  isReady(): boolean {
+    return this.ready;
   }
 
   private onData(data: string) {
     for (const raw of data.split('\n')) {
       const line = raw.trim();
       if (!line) continue;
+      this.onInteresting?.(line);
       this.lineHandler?.(line);
       if (line === 'uciok') this.ready = true;
       const info = parseUciInfoLine(line);
@@ -180,7 +187,11 @@ export class UciEngine {
 
   /** 立即停止当前搜索(保留已得结果,会触发 bestmove) */
   stop() {
-    this.send('stop');
+    try {
+      this.w.postMessage('stop');
+    } catch {
+      /* worker 可能已 terminate */
+    }
   }
 
   /** 队列执行一次搜索;resolve 于 bestmove */

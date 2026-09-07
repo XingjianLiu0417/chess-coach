@@ -5,7 +5,7 @@ import { Chess } from 'chess.js';
 import type { Color, EngineAnalysis, EngineSettings, MoveRecord, Verdict, CoachMsg, CoachSettings } from '../types';
 import { accuracyOf, classify, cpLossFor } from './analysis';
 import { detectPhase, sideToMove } from './helpers';
-import { getEngines, skillToEngineConfig } from '../engine/engines';
+import { ensureEngine, getEngines, restartEngine, skillToEngineConfig, clearEngineDiag, pushDiag } from '../engine/engines';
 import { toWhitePersp } from '../engine/uci';
 import { chatStream, loadSettings, saveSettings } from '../coach/llmClient';
 import { buildCommentaryPrompt, buildChatPrompt, buildReviewPrompt } from '../coach/prompts';
@@ -147,11 +147,14 @@ export const useStore = create<StoreState>((set, get) => {
     set({ analyzing: true });
     let an: EngineAnalysis | null = null;
     try {
-      const e = getEngines();
-      const res = await e.analyst.withTimeout(
-        e.analyst.search({ fen: rec.fenAfter, depth: ANALYSIS_DEPTH }),
-        ANALYSIS_MAX_MS,
-      );
+      const e = await ensureEngine('analyst');
+      // 硬上限:分析引擎若卡死(该引擎 movetime/stop 并不可靠),超时后重启自愈
+      const res = await Promise.race([
+        e.withTimeout(e.search({ fen: rec.fenAfter, depth: ANALYSIS_DEPTH }), ANALYSIS_MAX_MS),
+        sleep(ANALYSIS_MAX_MS + 6000).then(() => {
+          throw new Error('ANALYST_HANG');
+        }),
+      ]);
       if (epoch !== epochNow) return;
       const stm = sideToMove(rec.fenAfter);
       const { cpWhite, mateWhite } = toWhitePersp(stm, res.info?.scoreCp ?? null, res.info?.scoreMate ?? null);
@@ -163,7 +166,13 @@ export const useStore = create<StoreState>((set, get) => {
         depth: res.info?.depth ?? 0,
       };
     } catch (err) {
-      if (epoch === epochNow) console.warn('分析失败', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === 'ANALYST_HANG') {
+        pushDiag('analyst', '分析搜索超时,重启引擎');
+        restartEngine('analyst');
+      } else if (epoch === epochNow) {
+        console.warn('分析失败', err);
+      }
       an = null;
     }
     if (epoch !== epochNow) return;
@@ -330,22 +339,23 @@ export const useStore = create<StoreState>((set, get) => {
   };
 
   // ---------- 电脑回合 ----------
-  const computerTurn = async () => {
+  const computerTurn = async (attempt = 0) => {
     const epochNow = epoch;
     if (game.turn() === get().playerColor) return;
     set({ thinking: true, engineError: null });
     try {
-      const e = getEngines();
       const st = get();
+      const eng = await ensureEngine('player');
       const { skillLevel, movetimeMs } = skillToEngineConfig(st.engine.skillLevel);
-      await e.player.setOption('Skill Level', skillLevel);
+      await eng.setOption('Skill Level', skillLevel);
+      // isready 同步:确保引擎空闲且选项已生效再搜索
+      await eng.sync();
       if (epoch !== epochNow) return;
-      // 注意:该引擎对 movetime 的时间约束并不可靠,必须由我们到点发 stop。
-      // withTimeout 在 movetimeMs 到点发 stop → 引擎立即回报 bestmove。
+      // 该引擎 movetime/stop 不可靠 → 由我们到点发 stop;再加硬上限防卡死
       const res = await Promise.race([
-        e.player.withTimeout(e.player.search({ fen: game.fen(), movetime: movetimeMs }), movetimeMs),
-        sleep(movetimeMs + 8000).then(() => {
-          throw new Error('引擎长时间无响应');
+        eng.withTimeout(eng.search({ fen: game.fen(), movetime: movetimeMs }), movetimeMs),
+        sleep(movetimeMs + 9000).then(() => {
+          throw new Error('ENGINE_HANG');
         }),
       ]);
       if (epoch !== epochNow) return;
@@ -360,9 +370,17 @@ export const useStore = create<StoreState>((set, get) => {
       if (epoch !== epochNow) return;
       applyMove(move);
     } catch (err) {
-      if (epoch === epochNow) {
-        set({ thinking: false, engineError: `引擎出错:${err instanceof Error ? err.message : String(err)}` });
+      if (epoch !== epochNow) return;
+      const msg = err instanceof Error ? err.message : String(err);
+      const hangLike = msg.includes('HANG') || msg.includes('timeout') || msg.includes('同步') || msg.includes('init');
+      restartEngine('player');
+      if (hangLike && attempt === 0) {
+        pushDiag('player', `搜索异常(${msg}),重启引擎并重试一次`);
+        set({ thinking: false });
+        await sleep(400);
+        if (epoch === epochNow) return computerTurn(1);
       }
+      set({ thinking: false, engineError: `引擎出错:${msg}${hangLike ? '(已自动重置引擎,请再走一步)' : ''}` });
     }
   };
 
@@ -447,13 +465,12 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     boot: async () => {
+      clearEngineDiag();
       try {
-        const e = getEngines();
-        await e.analyst.init();
-        await e.analyst.setOption('Skill Level', 20);
-        await e.player.init();
+        await ensureEngine('analyst');
+        const e = await ensureEngine('player');
         const cfg = skillToEngineConfig(get().engine.skillLevel);
-        await e.player.setOption('Skill Level', cfg.skillLevel);
+        await e.setOption('Skill Level', cfg.skillLevel);
         set({ engineReady: true, engineError: null });
       } catch (err) {
         set({ engineReady: false, engineError: `引擎初始化失败:${err instanceof Error ? err.message : String(err)}` });

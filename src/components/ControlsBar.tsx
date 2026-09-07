@@ -1,4 +1,5 @@
 import { useStore } from '../game/store';
+import { engineDiagTail } from '../engine/engines';
 import type { Color } from '../types';
 
 const SKILL_LABEL: [number, string][] = [
@@ -68,7 +69,30 @@ export default function ControlsBar() {
           电脑教练思考中…
         </div>
       )}
-      {engineError && <div className="chat-item err">{engineError}</div>}
+      {engineError && (
+        <div>
+          <div className="chat-item err">{engineError}</div>
+          <details style={{ marginTop: 6 }}>
+            <summary className="hint" style={{ cursor: 'pointer' }}>引擎诊断日志</summary>
+            <pre
+              style={{
+                fontSize: 11,
+                lineHeight: 1.4,
+                background: '#1f1d1b',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                padding: 8,
+                overflowX: 'auto',
+                whiteSpace: 'pre-wrap',
+                maxHeight: 180,
+                overflowY: 'auto',
+              }}
+            >
+              {engineDiagTail(30).join('\n') || '(空)'}
+            </pre>
+          </details>
+        </div>
+      )}
     </div>
   );
 }
