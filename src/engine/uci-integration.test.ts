@@ -28,7 +28,7 @@ function makeAdapter(): UciWorker {
   });
   return {
     postMessage: (msg: string) => w.postMessage(msg),
-    set onmessage(fn) {
+    set onmessage(fn: ((e: { data: string }) => void) | null) {
       onmsg = fn;
     },
     terminate: () => w.terminate(),
@@ -49,7 +49,9 @@ const server = createServer((req, res) => {
 
 describe('UciEngine × Stockfish 集成回归', () => {
   it('init→setSkill→sync→go depth→bestmove 全链路', async () => {
-    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    await new Promise<void>((resolve) => {
+      server.listen({ port: 0, host: '127.0.0.1' }, () => resolve());
+    });
     portRef = (server.address() as { port: number }).port;
     try {
       const eng = new UciEngine(makeAdapter());

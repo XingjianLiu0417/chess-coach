@@ -48,11 +48,16 @@ async function rawSession(steps: { label: string; send: string | null; waitMs: n
 
 let portRef = 0;
 
+const listen = () =>
+  new Promise<void>((resolve) => {
+    server.listen({ port: 0, host: '127.0.0.1' }, () => resolve());
+  });
+
 const probeOn = process.env.ENGINE_PROBE === '1';
 
 describe.skipIf(!probeOn)('Stockfish setoption 行为定位', () => {
   it('场景A:uci→isready(无setoption) 应正常', async () => {
-    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    await listen();
     portRef = (server.address() as { port: number }).port;
     try {
       await rawSession([
@@ -65,7 +70,7 @@ describe.skipIf(!probeOn)('Stockfish setoption 行为定位', () => {
   }, 30000);
 
   it('场景B:uci→setoption Threads→isready 是否开始装死', async () => {
-    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    await listen();
     portRef = (server.address() as { port: number }).port;
     try {
       await rawSession([
@@ -80,7 +85,7 @@ describe.skipIf(!probeOn)('Stockfish setoption 行为定位', () => {
   }, 30000);
 
   it('场景C:uci→setoption Hash→isready', async () => {
-    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    await listen();
     portRef = (server.address() as { port: number }).port;
     try {
       await rawSession([
@@ -95,7 +100,7 @@ describe.skipIf(!probeOn)('Stockfish setoption 行为定位', () => {
   }, 30000);
 
   it('场景D:uci→setoption Skill Level 8→isready(验证 Skill 是否也致死)', async () => {
-    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    await listen();
     portRef = (server.address() as { port: number }).port;
     try {
       await rawSession([
@@ -110,7 +115,7 @@ describe.skipIf(!probeOn)('Stockfish setoption 行为定位', () => {
   }, 30000);
 
   it('场景E:uci→(Hash,Skill)→isready→go→stop→bestmove 完整链(无Threads)', async () => {
-    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    await listen();
     portRef = (server.address() as { port: number }).port;
     try {
       await rawSession([
